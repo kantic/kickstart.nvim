@@ -99,7 +99,7 @@ do
   vim.g.maplocalleader = ' '
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
-  vim.g.have_nerd_font = false
+  vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
   --  See `:help vim.o`
@@ -171,6 +171,12 @@ do
   -- instead raise a dialog asking if you wish to save the current file(s)
   -- See `:help 'confirm'`
   vim.o.confirm = true
+
+  -- tab as spaces
+  vim.o.expandtab = true
+  vim.o.shiftwidth = 4
+  vim.o.softtabstop = 4
+  vim.o.tabstop = 4
 end
 
 -- ============================================================
@@ -733,7 +739,20 @@ do
   --  See `:help lsp-config` for information about keys and how to configure
   ---@type table<string, vim.lsp.Config>
   local servers = {
-    -- clangd = {},
+    clangd = {},
+    basedpyright = {
+      settings = {
+        basedpyright = {
+          disableOrganizeImports = true,  -- ruff does this
+          analysis = { typeCheckingMode = 'standard' },
+        },
+      },
+    },
+    ruff = {
+      on_attach = function(client)
+        client.server_capabilities.hoverProvider = false  -- let basedpyright answer 'K'
+      end,
+    },
     -- gopls = {},
     -- pyright = {},
     -- tsc = {},
@@ -742,7 +761,7 @@ do
     --    https://github.com/mrcjkb/rustaceanvim
     --
     -- But for many setups, the LSP (`rust_analyzer`) will work just fine
-    -- rust_analyzer = {},
+    rust_analyzer = {},
 
     stylua = {}, -- Used to format Lua code
 
@@ -814,6 +833,8 @@ do
   end
 end
 
+vim.lsp.enable('gleam')
+
 -- ============================================================
 -- SECTION 7: FORMATTING
 -- conform.nvim setup and keymap
@@ -827,7 +848,11 @@ do
       -- You can specify filetypes to autoformat on save here:
       local enabled_filetypes = {
         -- lua = true,
-        -- python = true,
+        python = true,
+        gleam = true,
+        rust = true,
+        c = true,
+        cpp = true,
       }
       if enabled_filetypes[vim.bo[bufnr].filetype] then
         return { timeout_ms = 500 }
@@ -843,6 +868,7 @@ do
       -- rust = { 'rustfmt' },
       -- Conform can also run multiple formatters sequentially
       -- python = { "isort", "black" },
+      python = { 'ruff_organize_imports', 'ruff_format' },
       --
       -- You can use 'stop_after_first' to run the first available formatter from the list
       -- javascript = { "prettierd", "prettier", stop_after_first = true },
@@ -896,7 +922,7 @@ do
       -- <c-k>: Toggle signature help
       --
       -- See `:help blink-cmp-config-keymap` for defining your own keymap
-      preset = 'default',
+      preset = 'super-tab',
 
       -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
       --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -948,7 +974,7 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'gleam', 'python' }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
@@ -1034,6 +1060,74 @@ do
   -- require 'custom.plugins.ui'
   -- require 'custom.plugins.git'
 end
+
+-- project explorer and git
+vim.pack.add({
+  'https://github.com/nvim-lua/plenary.nvim',
+  'https://github.com/MunifTanjim/nui.nvim',
+  'https://github.com/nvim-tree/nvim-web-devicons',
+  { src = 'https://github.com/nvim-neo-tree/neo-tree.nvim', version = 'v3.x' },
+})
+
+require('neo-tree').setup({
+  sources = { 'filesystem', 'buffers', 'git_status' },
+  source_selector = {
+    winbar = true, -- the clickable tab bar at the top of the sidebar
+    sources = {
+      { source = 'filesystem', display_name = ' Files ' },
+      { source = 'buffers', display_name = ' Buffers ' },
+      { source = 'git_status', display_name = ' Git ' },
+    },
+  },
+  window = { position = 'left', width = 34 },
+  filesystem = {
+    follow_current_file = { enabled = true }, -- highlight the file you're editing
+    use_libuv_file_watcher = true,            -- refresh when files change on disk
+  },
+})
+
+vim.keymap.set('n', '\\', '<Cmd>Neotree toggle<CR>', { desc = 'Toggle file explorer' })
+vim.keymap.set('n', '<leader>gs', '<Cmd>Neotree git_status<CR>', { desc = 'Git status sidebar' })
+
+-- markdown preview
+vim.pack.add({ 'https://github.com/OXY2DEV/markview.nvim' })
+
+require('markview').setup({
+  preview = {
+    splitview_winopts = { split = 'below' },   -- 'below' = stacked, 'right' = side by side
+  },
+})
+
+vim.keymap.set('n', '<leader>mp', '<Cmd>Markview splitToggle<CR>', { desc = 'Markdown preview split' })
+
+-- sessions
+vim.o.sessionoptions = 'blank,buffers,curdir,folds,help,tabpages,winsize,winpos,terminal,localoptions'
+
+vim.pack.add({ 'https://github.com/rmagatti/auto-session' })
+
+require('auto-session').setup({
+  suppressed_dirs = { '~/', '~/Downloads', '/' },   -- never create sessions here
+  cwd_change_handling = true,                       -- swap sessions when the directory changes
+  pre_save_cmds = { 'Neotree close' },              -- the sidebar doesn't survive being saved
+  post_restore_cmds = { 'Neotree show' },           -- so reopen it after a restore
+})
+
+vim.keymap.set('n', '<leader>ss', '<Cmd>AutoSession search<CR>', { desc = 'Search sessions' })
+
+-- workspaces
+vim.pack.add({ 'https://github.com/natecraddock/workspaces.nvim' })
+
+require('workspaces').setup({
+  hooks = {
+    open_pre = { 'silent! wall'}, -- save all files before switching project
+    open = { 'Neotree show' },   -- make sure the sidebar is visible after switching
+  },
+})
+
+-- Searchable project list, if Telescope is installed (it is in kickstart)
+pcall(function() require('telescope').load_extension('workspaces') end)
+
+vim.keymap.set('n', '<leader>p', '<Cmd>Telescope workspaces<CR>', { desc = 'Switch project' })
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
